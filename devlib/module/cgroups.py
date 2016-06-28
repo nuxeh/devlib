@@ -51,14 +51,22 @@ class Controller(object):
     def mount(self, target, mount_root):
 
         mounted = target.list_file_systems()
-        if self.mount_name in [e.device for e in mounted]:
-            # Identify mount point if controller is already in use
-            self.mount_point = [
-                    fs.mount_point
-                    for fs in mounted
-                    if fs.device == self.mount_name
-                ][0]
-        else:
+        self.logger.info('mounted: %s, target: %s, mount_root: %s, mount_name: %s', mounted, target, mount_root, self.mount_name)
+
+        # mount_name: devlib_cpu
+        # mount_point.endswith(self.kind)
+        cgroups_mountpoints = [f.mount_point for f in mounted
+                                             if 'cgroup' in f.device]
+        self.logger.info('cgroups_mountpoints: %s', cgroups_mountpoints)
+        # Does it remount?
+        # To cope with systems which already mount cgroups filesystems by default
+        for mp in cgroups_mountpoints:
+            self.logger.info('mp: %s', mp)
+            if mp.endswith(self.kind):
+                self.mount_point = mp
+                self.logger.info('Found already mounted filesystem for %s '
+                                  'cgroup controller', self.kind)
+        if self.mount_point is None:
             # Mount the controller if not already in use
             self.mount_point = target.path.join(mount_root, self.mount_name)
             target.execute('mkdir -p {} 2>/dev/null'\
@@ -70,7 +78,7 @@ class Controller(object):
                             as_root=True)
 
         # Check if this controller uses "noprefix" option
-        output = target.execute('mount | grep "{} "'.format(self.mount_name))
+        output = target.execute('mount | grep "{} "'.format(self.mount_point))
         if 'noprefix' in output:
             self._noprefix = True
             # self.logger.debug('Controller %s using "noprefix" option',
